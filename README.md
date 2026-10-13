@@ -379,6 +379,7 @@ The project includes incremental PostgreSQL migrations.
 | `007_password_reset_tokens.sql` | Password recovery token storage |
 | `008_password_reset_functions.sql` | Password reset and session revocation |
 | `009_auth_rate_limiting.sql` | Persistent authentication rate limiting |
+| `010_auth_session_integrity.sql` | Session token, expiry and user-tenant integrity validation |
 
 Run migrations in numerical order on a fresh database.
 
