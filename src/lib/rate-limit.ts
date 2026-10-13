@@ -4,7 +4,10 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { pool } from "@/lib/db";
 
-type RateLimitAction = "login" | "forgot-password";
+type RateLimitAction =
+  | "login"
+  | "forgot-password"
+  | "register";
 
 type RateLimitInput = {
   action: RateLimitAction;
@@ -20,6 +23,10 @@ const LIMITS = {
   "forgot-password": {
     maxAttempts: 3,
     windowSeconds: 15 * 60,
+  },
+  register: {
+    maxAttempts: 3,
+    windowSeconds: 60 * 60,
   },
 } as const;
 
