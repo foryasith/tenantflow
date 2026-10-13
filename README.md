@@ -1,43 +1,39 @@
-
 # TenantFlow – Multi-Tenant SaaS Booking Platform
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-Type_Safe-blue?logo=typescript)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss)
 ![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?logo=docker)
-![Status](https://img.shields.io/badge/Status-Week_1_Security_Hardening-orange)
+![Status](https://img.shields.io/badge/Week_1-Security_Review_In_Progress-orange)
 
 **Parallax Labs | Full-Stack Developer Internship | Week 1**
 
-TenantFlow is a full-stack, multi-tenant SaaS booking platform built using Next.js, TypeScript, PostgreSQL, and Docker.
+TenantFlow is a full-stack multi-tenant SaaS booking platform built with Next.js, TypeScript, PostgreSQL, and Docker. Organizations share one application and database while tenant-aware access controls help isolate their data.
 
-The application allows multiple organizations to share one platform while maintaining strict logical separation of their data.
-
-Week 1 focuses on project architecture, organization onboarding, authentication, password recovery, database security, and tenant isolation.
+**Current status:** Week 1 features and database read/write isolation tests have been implemented. Final dependency and privileged-database-function security reviews remain outstanding. The project is **not production-ready**.
 
 ---
 
 ## 1. Project Overview
 
-TenantFlow provides a foundation for a Software-as-a-Service booking platform.
+TenantFlow provides the foundation for a booking platform in which each organization has a workspace, users, roles, and bookings.
 
-Each organization operates within its own workspace. Users belong to organizations, and PostgreSQL Row-Level Security (RLS) helps prevent one tenant from accessing another tenant's data.
+### Implemented Week 1 capabilities
 
-### Core Capabilities
+- Organization and owner registration with Zod validation and bcrypt password hashing
+- Multi-tenant PostgreSQL schema with organizations, roles, users, and bookings
+- PostgreSQL Row-Level Security (RLS) and transaction-scoped tenant context
+- Database-backed login sessions using HTTP-only cookies
+- Login, logout, and protected organization dashboard
+- Email-based password recovery via Resend
+- Single-use reset tokens with 15-minute expiration and session revocation
+- Persistent PostgreSQL-backed authentication request throttling
+- Authentication session integrity validation (Migration 010)
+- Tenant read-isolation and 11 tenant write-isolation test scenarios
+- Docker Compose local database and health-check endpoint
 
-- Organization and owner registration
-- Multi-tenant database architecture
-- Role-based user model
-- Authentication and session management
-- Protected organization dashboard
-- Password recovery through email
-- Single-use reset tokens
-- Persistent authentication rate limiting
-- PostgreSQL Row-Level Security
-- Dockerized local development
-
-Booking management, calendar functionality, payments, and additional SaaS capabilities are planned for later internship weeks.
+Booking creation APIs, calendar UI, payments, real-time collaboration, and caching are planned for later weeks.
 
 ---
 
@@ -47,16 +43,15 @@ Booking management, calendar functionality, payments, and additional SaaS capabi
 |---|---|
 | Frontend | Next.js 16, React, TypeScript |
 | Styling | Tailwind CSS 4 |
-| Backend | Next.js App Router API Routes |
-| Database | PostgreSQL 16 |
-| Database Client | node-postgres (`pg`) |
-| Containerization | Docker, Docker Compose |
-| Authentication | Database-backed sessions |
-| Password Hashing | bcryptjs |
+| Backend | Next.js App Router API routes |
+| Database | PostgreSQL 16, node-postgres (`pg`) |
+| Containerization | Docker and Docker Compose |
 | Validation | Zod |
-| Email Service | Resend |
-| Rate Limiting | PostgreSQL, HMAC-SHA256 |
-| Version Control | Git, GitHub |
+| Password hashing | bcryptjs (cost factor 12) |
+| Authentication | Database-backed sessions and HTTP-only cookies |
+| Password recovery email | Resend |
+| Rate limiting | PostgreSQL and HMAC-SHA256 |
+| Version control | Git and GitHub |
 
 ---
 
@@ -64,52 +59,37 @@ Booking management, calendar functionality, payments, and additional SaaS capabi
 
 ```mermaid
 flowchart TD
-    A[User Browser] --> B[Next.js Application]
-
-    B --> C[React Frontend]
+    A[Browser] --> B[Next.js Application]
+    B --> C[React UI]
     B --> D[API Routes]
-
     D --> E[Zod Validation]
-    E --> F[Authentication and Security]
-
+    E --> F[Authentication and Security Layer]
     F --> G[Session Management]
     F --> H[Rate Limiting]
     F --> I[Password Recovery]
-
     G --> J[(PostgreSQL)]
     H --> J
     I --> J
-
     I --> K[Resend Email API]
-
     J --> L[Row-Level Security]
-    L --> M[Tenant-Isolated Data]
+    L --> M[Tenant-Scoped Data]
 ```
 
-### Architecture Principles
-
-1. **Shared application:** Multiple organizations use the same Next.js deployment.
-2. **Shared database:** Tenant-owned data is stored in PostgreSQL.
-3. **Tenant isolation:** Row-Level Security restricts access to tenant-owned rows.
-4. **Server-side authentication:** Session validation is performed by the backend.
-5. **Restricted access:** The application uses a dedicated PostgreSQL role.
-6. **Defense in depth:** Validation, password hashing, session protection, and rate limiting reduce common authentication risks.
+**Design principles:** One shared application and database, explicit server-side session validation, tenant-scoped queries, database constraints, and layered input validation. A separate application database role is used for normal database connections.
 
 ---
 
 ## 4. Database Design
 
-The database contains the following core tables:
-
 | Table | Purpose |
 |---|---|
-| `organizations` | Organization and workspace information |
-| `roles` | OWNER, ADMIN, MEMBER roles |
+| `organizations` | Workspaces, names, and unique slugs |
+| `roles` | OWNER, ADMIN, and MEMBER roles |
 | `users` | Organization users and password hashes |
-| `bookings` | Tenant-owned booking records |
-| `auth_sessions` | Server-side authentication sessions |
+| `bookings` | Organization-owned bookings and schedules |
+| `auth_sessions` | Hashed session tokens and expiration |
 | `password_reset_tokens` | Time-limited password recovery tokens |
-| `auth_rate_limits` | Persistent authentication request counters |
+| `auth_rate_limits` | Persistent request counters identified by HMAC keys |
 
 ### Entity Relationship Diagram
 
@@ -118,226 +98,162 @@ erDiagram
     ORGANIZATIONS ||--o{ USERS : has
     ORGANIZATIONS ||--o{ BOOKINGS : owns
     ORGANIZATIONS ||--o{ AUTH_SESSIONS : scopes
-
     ROLES ||--o{ USERS : assigned
-
     USERS ||--o{ BOOKINGS : creates
     USERS ||--o{ AUTH_SESSIONS : authenticates
     USERS ||--o{ PASSWORD_RESET_TOKENS : requests
 
     ORGANIZATIONS {
         uuid id PK
-        string name
-        string slug UK
-        timestamp created_at
+        varchar name
+        varchar slug UK
+        timestamptz created_at
     }
-
     ROLES {
         uuid id PK
-        string name UK
+        varchar name UK
     }
-
     USERS {
         uuid id PK
         uuid organization_id FK
         uuid role_id FK
-        string full_name
-        string email
-        string password_hash
+        varchar full_name
+        varchar email
+        text password_hash
     }
-
     BOOKINGS {
         uuid id PK
         uuid organization_id FK
         uuid created_by FK
-        string title
-        timestamp start_time
-        timestamp end_time
-        string status
+        varchar title
+        timestamptz start_time
+        timestamptz end_time
+        varchar status
     }
-
     AUTH_SESSIONS {
         uuid id PK
         uuid user_id FK
         uuid organization_id FK
-        string token_hash
-        timestamp expires_at
+        text token_hash UK
+        timestamptz expires_at
     }
-
     PASSWORD_RESET_TOKENS {
         uuid id PK
         uuid user_id FK
-        string token_hash UK
-        timestamp expires_at
-        timestamp used_at
-        timestamp created_at
+        text token_hash
+        timestamptz expires_at
+        timestamptz used_at
     }
-
     AUTH_RATE_LIMITS {
-        string rate_key PK
+        text rate_key PK
         int attempt_count
-        timestamp window_expires_at
-        timestamp updated_at
+        timestamptz window_expires_at
+        timestamptz updated_at
     }
 ```
 
-The `auth_rate_limits` table contains keyed security counters rather than a direct foreign-key relationship to an organization or user.
+The `auth_rate_limits` table stores pseudonymous keyed counters and does not require a direct user or organization foreign key.
 
 ---
 
 ## 5. Multi-Tenant Security
 
-TenantFlow uses PostgreSQL Row-Level Security to isolate organization data.
-
-### Tenant Context
-
-Tenant-specific database operations use a transaction-scoped tenant identifier:
+PostgreSQL RLS policies restrict organization and user records and booking operations using a transaction-scoped tenant identifier:
 
 ```sql
 SELECT set_config('app.tenant_id', $1, true);
 ```
 
-The tenant identifier must be obtained from a verified session rather than trusted directly from a user request.
+The application must derive the tenant identifier from a validated session; clients must not be allowed to select arbitrary tenant context.
 
-### Security Features
+- RLS and `FORCE ROW LEVEL SECURITY` are enabled for the protected tables.
+- `organizations` has tenant-scoped read access through an RLS policy.
+- `users` and `bookings` have tenant-scoped `SELECT`, `INSERT`, `UPDATE`, and `DELETE` policies.
+- The composite foreign key on bookings requires the creator to belong to the booking's organization.
+- A composite foreign key on sessions requires the session's user to belong to the same organization.
+- The application database role, `tenantflow_app`, is not a superuser and has no `BYPASSRLS` attribute.
 
-- Row-Level Security policies
-- Dedicated application database role
-- Tenant-aware data access
-- Transaction-scoped tenant context
-- Composite foreign-key constraints
-- Restricted direct access to protected tables
-- Security-definer functions for selected authentication operations
-
-### Database Isolation
-
-The database includes tests demonstrating that:
-
-- Tenant Alpha can read its own bookings.
-- Tenant Beta can read its own bookings.
-- A tenant cannot read another tenant's protected booking records.
-- Queries without a valid tenant context return no protected bookings.
-
-Additional tenant write-isolation and privileged-function tests are planned before the final Week 1 security sign-off.
+**Important security boundary:** The existing RLS design trusts `app.tenant_id`, a PostgreSQL setting that a holder of the application DB credentials can manipulate. Consequently, the tests demonstrate correct policy behavior under a trusted tenant context, **not** isolation against compromised database credentials or arbitrary SQL execution. Security-definer authentication functions also require a further privilege-boundary review.
 
 ---
 
-## 6. Authentication
+## 6. Authentication and Session Security
 
-TenantFlow uses database-backed session authentication.
+### Organization registration
 
-### User Registration
-
-Organization registration performs the following operations:
-
-1. Validate registration details using Zod.
-2. Generate a unique organization slug.
+1. Validate organization name, full name, email, and password with Zod.
+2. Create a unique organization slug.
 3. Hash the password using bcrypt.
-4. Create an organization and owner account.
-5. Return the organization identifier and workspace slug.
+4. Create the organization and owner account using a database function.
+5. Return organization and owner details.
 
-### Login
+### Login and session management
 
-Users log in using:
+Users log in with workspace slug, email address, and password. The server verifies credentials, creates a cryptographically random session token, hashes the token for database storage, and sets an HTTP-only cookie.
 
-- Organization workspace slug
-- Email address
-- Password
+- HTTP-only session cookie with `SameSite=Lax`
+- Secure cookie flag in production mode
+- Database-backed session expiry (seven days in the application)
+- Session lookup and logout/revocation
+- Dashboard access based on server-validated sessions
 
-After successful authentication, the server creates a session and sets an HTTP-only cookie.
+### Migration 010 – Session Integrity
 
-### Session Security
+`010_auth_session_integrity.sql` strengthens the session functions:
 
-- HTTP-only session cookies
-- `SameSite=Lax`
-- Secure cookies in production mode
-- Hashed session tokens in PostgreSQL
-- Session expiration
-- Server-side session validation
-- Logout and session revocation
+- Rejects session token hashes that are not 64 lowercase hexadecimal characters.
+- Rejects expired session timestamps and session lifetimes exceeding seven days plus a small clock tolerance.
+- Validates the requested user and organization association when creating sessions.
+- Requires matching user and session organizations when retrieving sessions.
+- Preserves existing function signatures and application execution privileges.
 
-### Protected Dashboard
+**Verified negative tests:** Invalid hash, expired session, excessive expiration, and nonexistent user/tenant identity were all rejected. A full post-migration browser login/dashboard/refresh/logout regression was requested but has not been separately confirmed in the provided test output.
 
-The dashboard requires a valid authenticated session and displays organization-scoped information.
+These checks protect data integrity but **do not** prevent arbitrary session creation if the database role authorized to execute `create_auth_session` is compromised. That requires stronger privilege separation.
 
 ---
 
 ## 7. Password Recovery
 
-TenantFlow supports email-based password recovery using Resend.
-
-### Password Reset Workflow
+Resend delivers email-based password recovery links. The server stores a SHA-256 hash of a random reset token rather than the plaintext token.
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant UI as Next.js Frontend
-    participant API as Authentication API
+    participant UI as Frontend
+    participant API as Auth API
     participant DB as PostgreSQL
     participant E as Resend
-
     U->>UI: Enter workspace slug and email
     UI->>API: POST /api/auth/forgot-password
-    API->>DB: Check rate limit
-    API->>DB: Store hashed reset token
-    API->>E: Request reset email delivery
-    E-->>U: Password reset email
-
-    U->>UI: Open reset link
-    U->>UI: Enter new password
+    API->>DB: Check request limit
+    API->>DB: Issue hashed reset token
+    API->>E: Send reset email
+    E-->>U: Deliver reset link
+    U->>UI: Open link and set new password
     UI->>API: POST /api/auth/reset-password
-    API->>DB: Validate and consume token
-    API->>DB: Update password hash
+    API->>DB: Consume token and update password
     API->>DB: Revoke previous sessions
     API-->>UI: Password updated
-    U->>UI: Login with new password
 ```
 
-### Password Reset Security
+Recovery security features include 15-minute expiry, single-use tokens, bcrypt password rehashing, existing-session revocation, and generic responses intended to reduce account enumeration.
 
-- Cryptographically random reset tokens
-- SHA-256 token hashes stored in PostgreSQL
-- 15-minute token expiration
-- Single-use token enforcement
-- bcrypt hashing for new passwords
-- Revocation of previous login sessions
-- Generic password recovery responses
-- Password reset request throttling
-
-### Verified End-to-End Tests
-
-| Test | Result |
-|---|---|
-| Forgot Password request | Passed |
-| Reset email received | Passed |
-| Reset link opens | Passed |
-| New password saved | Passed |
-| Login with new password | Passed |
-| Old password rejected | Passed |
-| Reused token rejected (HTTP 400) | Passed |
-| Previous session rejected (HTTP 401) | Passed |
+**Previously verified end-to-end behavior:** Reset email received; reset link worked; new password accepted; old password rejected; used token rejected (`400`); previous session rejected (`401`). Timing-based account enumeration protection and complete delivery-failure handling are not independently verified.
 
 ---
 
 ## 8. Authentication Rate Limiting
 
-TenantFlow uses a PostgreSQL-backed rate limiter.
+The application uses a PostgreSQL-backed counter and HMAC-SHA256 identifiers derived from normalized request inputs.
 
-A shared helper generates HMAC-SHA256 keys from normalized request identities so raw email addresses are not stored in rate-limit records.
+| Endpoint | Limit | Window | Status |
+|---|---:|---|---|
+| Login | 5 requests | 15 minutes | HTTP integration verified |
+| Forgot Password | 3 requests | 15 minutes | Integrated; full delivery-blocking test not confirmed |
+| Registration | 3 requests per email | 60 minutes | SQL rate-limit function test passed; full HTTP integration test not confirmed |
 
-### Current Rate Limit Policy
-
-| Endpoint | Maximum requests | Window |
-|---|---|---|
-| Login | 5 | 15 minutes |
-| Forgot Password | 3 | 15 minutes |
-| Registration | 3 | 60 minutes |
-
-The login and password recovery routes use the shared database-backed rate limiter.
-
-Registration rate-limit integration has been added and requires final integration-test verification.
-
-### Login Rate Limit Test
+### Verified login HTTP test
 
 ```text
 Attempt 1: HTTP 401
@@ -349,41 +265,26 @@ Attempt 6: HTTP 429
 Attempt 7: HTTP 429
 ```
 
-The login rate-limit behavior was verified using PowerShell HTTP requests and PostgreSQL counter queries.
-
-### Current Limitations
-
-- Rate limiting is currently identity-based.
-- All login requests count toward the limit, including successful attempts.
-- Trusted IP/network-level throttling is not implemented.
-- Registration protection can be bypassed by rotating email identities.
-- Bot mitigation is not implemented.
-- Fixed `Retry-After` values may differ from the remaining rate-limit window.
-
-Additional protections are required before public production deployment.
+**Limitations:** Identity-based limits can be bypassed by changing email addresses; legitimate users can be rate-limited by repeated successful logins; the implementation does not include trusted-IP/network throttling or bot protection. Fixed `Retry-After` headers are not necessarily the exact remaining wait time. These controls are not sufficient on their own for internet-facing production use.
 
 ---
 
 ## 9. Database Migrations
 
-The project includes incremental PostgreSQL migrations.
-
 | Migration | Purpose |
 |---|---|
-| `001_initial_schema.sql` | Organizations, users, roles, bookings |
-| `002_tenant_rls.sql` | Tenant Row-Level Security |
-| `003_auth_sessions.sql` | Database-backed authentication sessions |
-| `004_organization_provisioning.sql` | Organization and owner creation |
-| `005_auth_functions.sql` | Authentication helper functions |
-| `006_revoke_auth_session.sql` | Session revocation support |
+| `001_initial_schema.sql` | Organizations, roles, users, and bookings |
+| `002_tenant_rls.sql` | Tenant role and Row-Level Security policies |
+| `003_auth_sessions.sql` | Authentication session table and constraints |
+| `004_organization_provisioning.sql` | Organization registration function |
+| `005_auth_functions.sql` | Login and session functions |
+| `006_revoke_auth_session.sql` | Logout/session revocation |
 | `007_password_reset_tokens.sql` | Password recovery token storage |
-| `008_password_reset_functions.sql` | Password reset and session revocation |
-| `009_auth_rate_limiting.sql` | Persistent authentication rate limiting |
-| `010_auth_session_integrity.sql` | Session token, expiry and user-tenant integrity validation |
+| `008_password_reset_functions.sql` | Password recovery functions |
+| `009_auth_rate_limiting.sql` | Persistent rate-limit counters and function |
+| `010_auth_session_integrity.sql` | Session token, expiry, and tenant integrity validation |
 
-Run migrations in numerical order on a fresh database.
-
-Migrations in this repository are development migrations and are not designed to be repeatedly executed against an existing database.
+Apply migrations **in numerical order** to a freshly initialized local development database. Do not replay the entire migration set on an already migrated database. Migration 010 has been applied and its negative tests passed in the development environment.
 
 ---
 
@@ -394,116 +295,82 @@ Migrations in this repository are development migrations and are not designed to
 - Node.js and npm
 - Docker Desktop
 - Git
+- Windows PowerShell for the commands below
 
-### Step 1: Clone the Repository
+### Step 1: Clone and install
 
-```bash
+```powershell
 git clone https://github.com/foryasith/tenantflow.git
 cd tenantflow
 npm install
+```
+
+If setting up from `main` before the Week 1 branch has been merged, switch to the in-progress branch:
+
+```powershell
+git switch week/01-foundation
 ```
 
 ### Step 2: Start PostgreSQL
 
 ```powershell
 docker compose up -d
-docker ps
-```
-
-Check database readiness:
-
-```powershell
 docker exec tenantflow-db pg_isready -U postgres -d tenantflow
 ```
 
-### Step 3: Configure Environment Variables
+### Step 3: Configure environment variables
 
-Create a `.env.local` file in the project root.
-
-The following variables are required for the corresponding development features:
+Create `.env.local` in the project root. Check `.env.example` and the application source for any additional required variables. Use the following placeholders only as examples:
 
 ```env
 DATABASE_URL=postgresql://tenantflow_app:YOUR_LOCAL_PASSWORD@127.0.0.1:5433/tenantflow
-
 RESEND_API_KEY=YOUR_RESEND_API_KEY
-EMAIL_FROM="TenantFlow <YOUR_VERIFIED_SENDER>"
+EMAIL_FROM=YOUR_VERIFIED_SENDER
 APP_URL=http://localhost:3000
-
 AUTH_RATE_LIMIT_SECRET=YOUR_RANDOM_SECRET
 ```
 
-Use your actual local database credentials, Resend credentials, verified sender configuration, and a cryptographically random rate-limit secret.
-
-Generate a development rate-limit secret with:
+Generate a new secret:
 
 ```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Never commit `.env.local`, production credentials, API keys, or secrets.
+Never commit `.env.local`, actual passwords, secret tokens, or email API keys.
 
-### Step 4: Apply Database Migrations
-
-For a fresh PostgreSQL database, apply the migration files in numerical order.
-
-PowerShell:
+### Step 4: Apply migrations (fresh local database only)
 
 ```powershell
-Get-ChildItem database/migrations -Filter "*.sql" |
+Get-ChildItem database/migrations -Filter '*.sql' |
   Sort-Object Name |
   ForEach-Object {
     $file = $_
-
     Write-Host "Applying $($file.Name)"
-
     docker cp $file.FullName tenantflow-db:/tmp/migration.sql
-
-    if ($LASTEXITCODE -ne 0) {
-      throw "Failed to copy $($file.Name)"
-    }
-
-    docker exec tenantflow-db psql `
-      -X `
-      -v ON_ERROR_STOP=1 `
-      -1 `
-      -U postgres `
-      -d tenantflow `
-      -f /tmp/migration.sql
-
-    if ($LASTEXITCODE -ne 0) {
-      throw "Migration failed: $($file.Name)"
-    }
+    if ($LASTEXITCODE -ne 0) { throw "Copy failed: $($file.Name)" }
+    docker exec tenantflow-db psql -X -v ON_ERROR_STOP=1 -1 -U postgres -d tenantflow -f /tmp/migration.sql
+    if ($LASTEXITCODE -ne 0) { throw "Migration failed: $($file.Name)" }
   }
 ```
 
-Run this only against a newly initialized database that has not already received these migrations.
+**Caution:** These migrations were developed incrementally; review the initial Docker/database role setup before using the bootstrap commands on a different machine. `-1` wraps each migration execution in a transaction where supported.
 
-### Step 5: Load Demo Data
+### Step 5: Seed demonstration data (fresh database only)
 
 ```powershell
 docker cp database/seeds/001_demo_data.sql tenantflow-db:/tmp/seed.sql
-
-docker exec tenantflow-db psql `
-  -X `
-  -v ON_ERROR_STOP=1 `
-  -U postgres `
-  -d tenantflow `
-  -f /tmp/seed.sql
+docker exec tenantflow-db psql -X -v ON_ERROR_STOP=1 -U postgres -d tenantflow -f /tmp/seed.sql
 ```
 
-The seed data is intended for initial development setup.
-
-### Step 6: Start Next.js
+### Step 6: Start the app
 
 ```powershell
 npm run dev
 ```
 
-Open:
+Open `http://localhost:3000/login`.
 
-http://localhost:3000
-
-### Step 7: Run a Production Build
+### Step 7: Production build
 
 ```powershell
 npm run build
@@ -513,83 +380,97 @@ npm run build
 
 ## 11. Application Routes
 
-### Frontend Routes
+### Frontend
 
-| Route | Description |
+| Route | Purpose |
 |---|---|
-| `/` | Application landing page |
-| `/register` | Organization registration |
-| `/login` | User login |
-| `/dashboard` | Protected organization dashboard |
-| `/forgot-password` | Request a password reset |
-| `/reset-password` | Set a new password |
+| `/` | Landing page |
+| `/register` | Create organization and owner |
+| `/login` | Authenticate into a workspace |
+| `/dashboard` | Protected workspace dashboard |
+| `/forgot-password` | Request password recovery email |
+| `/reset-password` | Enter a new password using reset token |
 
-### API Routes
+### API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/api/health` | Database health check |
-| POST | `/api/auth/register` | Create organization and owner |
-| POST | `/api/auth/login` | Authenticate user |
+| GET | `/api/health` | Database health |
+| POST | `/api/auth/register` | Organization registration |
+| POST | `/api/auth/login` | Authentication and session creation |
 | POST | `/api/auth/logout` | Revoke session |
-| GET | `/api/auth/me` | Retrieve current session user |
-| POST | `/api/auth/forgot-password` | Request password recovery |
-| POST | `/api/auth/reset-password` | Update password using reset token |
+| GET | `/api/auth/me` | Current authenticated user |
+| POST | `/api/auth/forgot-password` | Issue password recovery email |
+| POST | `/api/auth/reset-password` | Consume reset token and update password |
 
 ---
 
 ## 12. Testing and Quality Assurance
 
-### Static Checks
+### TypeScript, ESLint, and build
 
 ```powershell
 npx tsc --noEmit
 npx eslint .
-```
-
-### Production Build
-
-```powershell
 npm run build
 ```
 
-### Health Check
+These checks passed following Migration 010 and the authentication changes.
+
+### Health and database checks
 
 ```powershell
 Invoke-RestMethod http://localhost:3000/api/health
-```
-
-### Database Verification
-
-```powershell
 docker exec tenantflow-db psql -U postgres -d tenantflow -c "\dt"
 ```
 
-### Authentication Testing
+### Tenant read isolation
 
-Verified during local development:
+`database/tests/001_tenant_isolation.sql` exercises Alpha, Beta, and missing-tenant read contexts. Earlier development tests confirmed tenant-specific read visibility.
 
-- Organization registration
-- Login with valid credentials
-- Rejection of invalid credentials
-- Logout
-- Session verification
-- Protected dashboard
-- Password reset email delivery
-- Password reset with valid token
-- Single-use reset token enforcement
-- Previous-session invalidation
-- Login rate-limit enforcement
+### Tenant write isolation — 11/11 passed
 
-### Tenant Isolation Testing
+`database/tests/002_tenant_write_isolation.sql` validates RLS using the restricted `tenantflow_app` role. It executes inside a transaction that ends with `ROLLBACK`.
 
-Initial database read-isolation tests demonstrated:
+| # | Scenario | Result |
+|---:|---|---|
+| 1 | Cross-tenant booking SELECT blocked | PASS |
+| 2 | Same-tenant booking INSERT allowed | PASS |
+| 3 | Cross-tenant booking INSERT blocked | PASS |
+| 4 | Same-tenant booking UPDATE allowed | PASS |
+| 5 | Cross-tenant booking UPDATE blocked | PASS |
+| 6 | Cross-tenant booking DELETE blocked | PASS |
+| 7 | Cross-tenant user UPDATE blocked | PASS |
+| 8 | Cross-tenant user DELETE blocked | PASS |
+| 9 | Same-tenant test booking DELETE allowed | PASS |
+| 10 | Missing tenant context exposes no users/bookings | PASS |
+| 11 | Beta tenant sees only Beta bookings | PASS |
 
-- Organization-specific booking visibility
-- Cross-tenant read restrictions
-- No protected booking visibility without tenant context
+Run against the **seeded local development database only**:
 
-Automated tenant write-isolation tests and broader authorization tests remain pending.
+```powershell
+docker cp database/tests/002_tenant_write_isolation.sql tenantflow-db:/tmp/002_tenant_write_isolation.sql
+docker exec tenantflow-db psql -X -v ON_ERROR_STOP=1 -U postgres -d tenantflow -f /tmp/002_tenant_write_isolation.sql
+```
+
+Expected ending: `PASS 11: Beta sees only Beta bookings`, followed by `ROLLBACK`.
+
+These tests verify enforcement of the specified policies under selected tenant contexts; they do not prove security against arbitrary database access.
+
+### Session integrity tests — 4/4 passed
+
+- Invalid session token hash rejected.
+- Expired session rejected.
+- Excessively long session expiration rejected.
+- Unknown user/organization identity rejected.
+
+### Additional authentication tests
+
+- Registration, login, logout, session verification, and protected dashboard exercised during development.
+- Password recovery email, single-use tokens, new-password login, and previous-session revocation verified.
+- Login rate limiting verified by HTTP 429 after the fifth request.
+
+**Still to verify separately:** Post-Migration-010 browser session regression, comprehensive registration/forgot-password HTTP abuse tests, and dependency vulnerability review.
 
 ---
 
@@ -597,7 +478,6 @@ Automated tenant write-isolation tests and broader authorization tests remain pe
 
 ```text
 tenantflow/
-│
 ├── database/
 │   ├── migrations/
 │   │   ├── 001_initial_schema.sql
@@ -608,14 +488,13 @@ tenantflow/
 │   │   ├── 006_revoke_auth_session.sql
 │   │   ├── 007_password_reset_tokens.sql
 │   │   ├── 008_password_reset_functions.sql
-│   │   └── 009_auth_rate_limiting.sql
-│   │
+│   │   ├── 009_auth_rate_limiting.sql
+│   │   └── 010_auth_session_integrity.sql
 │   ├── seeds/
 │   │   └── 001_demo_data.sql
-│   │
 │   └── tests/
-│       └── 001_tenant_isolation.sql
-│
+│       ├── 001_tenant_isolation.sql
+│       └── 002_tenant_write_isolation.sql
 ├── src/
 │   ├── app/
 │   │   ├── api/
@@ -627,25 +506,18 @@ tenantflow/
 │   │   │   │   ├── forgot-password/
 │   │   │   │   └── reset-password/
 │   │   │   └── health/
-│   │   │
 │   │   ├── dashboard/
 │   │   ├── login/
 │   │   ├── register/
 │   │   ├── forgot-password/
-│   │   ├── reset-password/
-│   │   ├── layout.tsx
-│   │   └── globals.css
-│   │
+│   │   └── reset-password/
 │   ├── components/
-│   │   └── auth/
-│   │
 │   └── lib/
 │       ├── auth.ts
 │       ├── db.ts
 │       ├── email.ts
 │       ├── rate-limit.ts
 │       └── validations/
-│
 ├── public/
 ├── .env.example
 ├── next.config.ts
@@ -658,27 +530,24 @@ tenantflow/
 
 ## 14. Known Limitations and Security Work Remaining
 
-Week 1 core functionality is implemented, but additional hardening is still in progress.
+### High-priority security review
 
-### Remaining Security Work
+- **Database trust boundary:** `tenantflow_app` can call elevated `SECURITY DEFINER` authentication functions. The ability to supply arguments to `create_auth_session` and password reset functions remains sensitive if DB credentials are exposed.
+- **Tenant context:** The application database role can set `app.tenant_id`; RLS tests assume the supplied tenant context is trustworthy.
+- **Dependency audit:** `npm audit --omit=dev`, `npm audit`, and `npm outdated` results have not yet been reviewed.
+- **Authentication abuse:** Registration needs trusted-IP/network protections, bot mitigation, and broader HTTP integration tests. Forgot-password email throttling should be verified end-to-end.
+- **Account enumeration:** Uniform messages alone do not fully prevent timing or side-channel leakage.
+- **Session regression:** Explicit browser verification after Migration 010 remains pending.
 
-- Complete registration rate-limit integration tests
-- Harden privileged PostgreSQL authentication functions
-- Add full tenant write-isolation tests
-- Expand authentication edge-case tests
-- Review account-enumeration timing differences
-- Review dependency vulnerabilities using `npm audit`
-- Add trusted IP/network-based throttling
-- Add registration bot protection
-- Review email verification requirements
-- Validate production deployment security settings
+### Upcoming functionality
 
-### Functional Limitations
+- Booking management and calendar UI — Week 2
+- Payments and pricing — Week 3
+- Real-time capabilities — Week 4
+- Caching and settings — Week 5
+- Deployment and polish — Week 6
 
-- Booking creation and editing are planned for Week 2.
-- Calendar management is not yet implemented.
-- Payments, real-time capabilities and caching are future work.
-- The current project is not certified production-ready.
+This repository has not undergone a full production security assessment.
 
 ---
 
@@ -686,61 +555,44 @@ Week 1 core functionality is implemented, but additional hardening is still in p
 
 | Week | Focus |
 |---|---|
-| 1 | Foundation, authentication, tenant isolation and security |
+| 1 | Architecture, schema, tenant isolation, authentication, and security |
 | 2 | Booking APIs and calendar UI |
-| 3 | Payments, webhooks and pricing |
+| 3 | Payments, webhooks, and pricing |
 | 4 | Real-time collaboration |
-| 5 | Caching and advanced SaaS features |
-| 6 | Deployment, migrations, documentation and final polish |
+| 5 | Caching and application settings |
+| 6 | Deployment, documentation, and final polish |
 
 ---
 
 ## 16. Git Workflow
 
-Development follows a branch-based workflow.
-
 | Branch | Purpose |
 |---|---|
 | `main` | Stable submission branch |
-| `week/01-foundation` | Week 1 implementation |
-| Future weekly branches | Upcoming internship tasks |
+| `week/01-foundation` | Week 1 development and hardening |
+| Future weekly branches | Upcoming features |
 
-### Development Process
+Workflow: develop on the weekly branch, test, commit, push, review, and merge into `main` only after checks pass.
 
-1. Implement features on the weekly branch.
-2. Run TypeScript, ESLint and production build checks.
-3. Test relevant functionality.
-4. Create meaningful Git commits.
-5. Push changes to GitHub.
-6. Review and merge tested changes into `main`.
-
-### Commit Examples
+Selected commits from Week 1:
 
 ```text
-feat(auth): implement password recovery UI and email API
-feat(security): add persistent authentication rate limit storage
 feat(security): rate limit password recovery requests
 feat(security): protect login with persistent rate limiting
-feat(security): add registration request rate limiting
-docs: update Week 1 authentication and security progress
+fix(security): validate authentication session integrity
+test(security): verify tenant write isolation policies
 ```
 
 ---
 
 ## 17. Project Status
 
-**Week 1: Core foundation implemented; final security hardening in progress.**
+**Week 1: Foundation built; final security review in progress.**
 
-Completed capabilities include multi-tenant PostgreSQL architecture, organization onboarding, authentication, protected dashboard, email-based password recovery, single-use reset tokens, session revocation, and login/password-recovery rate limiting.
+Implemented: multi-tenant PostgreSQL schema, RLS, registration, session-based login, password recovery, persistent rate-limit integration, session integrity hardening, and 11 successful tenant write-isolation tests.
 
-Registration protection has been integrated and awaits final test verification.
+Pending: dependency audit, elevated function/credential security design, remaining HTTP security verification, post-migration browser regression, and Week 1 final review/merge.
 
-Remaining work includes privileged database-function hardening, broader tenant-isolation testing, dependency security review, and final Week 1 sign-off.
-
----
-
-## Repository
-
-**GitHub:** https://github.com/foryasith/tenantflow
+**Repository:** https://github.com/foryasith/tenantflow
 
 **Internship:** Parallax Labs – Full-Stack Developer Internship
