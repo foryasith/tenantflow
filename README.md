@@ -417,6 +417,23 @@ npm run build
 
 These checks passed following Migration 010 and the authentication changes.
 
+### Dependency Security Audit
+
+Dependency security was reviewed using npm audit.
+
+- Production dependencies: 0 reported vulnerabilities
+- Full dependency tree: 5 high-severity findings
+- Affected chain: eslint-config-next / fast-glob /
+  micromatch / braces
+- The automatic force fix proposes an incompatible
+  eslint-config-next major-version downgrade.
+
+Development-tooling dependency remediation remains
+pending compatibility verification.
+
+The application has not undergone a complete
+production security assessment.
+
 ### Health and database checks
 
 ```powershell
